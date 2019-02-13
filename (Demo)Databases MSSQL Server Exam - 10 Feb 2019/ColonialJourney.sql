@@ -178,5 +178,74 @@ SELECT k.JobDuringJourney, CONCAT(c.FirstName, ' ', c.LastName) AS FullName, Job
 
 -- 17. Planets and Spaceports
 
+SELECT P.Name AS [Name] , COUNT(SP.Name) AS [Count]
+FROM Planets AS P
+LEFT JOIN Spaceports AS SP ON SP.PlanetId = P.Id
+GROUP BY P.Name
+ORDER BY Count DESC, Name ASC
 
+-- Section 4. Programmability (20 pts)
 
+-- 18. Get Colonists Count
+
+GO
+CREATE FUNCTION udf_GetColonistsCount(@PlanetName VARCHAR(30))
+RETURNS INT
+AS
+BEGIN
+	RETURN ( SELECT COUNT(*) FROM Journeys AS J
+	JOIN Spaceports AS SP ON SP.Id = J.DestinationSpaceportId
+	JOIN Planets AS P ON P.Id = SP.PlanetId
+	JOIN TravelCards AS TC ON TC.JourneyId = J.Id
+	JOIN Colonists AS  C ON C.Id = TC.ColonistId 
+	WHERE P.Name = @PlanetName
+	)
+END
+
+-- 19. Change Journey Purpose
+GO
+CREATE PROCEDURE usp_ChangeJourneyPurpose(@JourneyId INT, @NewPurpose VARCHAR(30))
+AS
+BEGIN
+	DECLARE @TargetJourneyId INT = (SELECT Id FROM Journeys WHERE Id = @JourneyId)
+
+	IF(@TargetJourneyId IS NULL)
+	BEGIN
+		;THROW 51000, 'The journey does not exist!', 1
+	END
+
+	DECLARE @CurrentJourneyPurpose VARCHAR(30) = (SELECT Purpose FROM Journeys WHERE Id = @JourneyId)
+
+	IF(@CurrentJourneyPurpose = @NewPurpose)
+	BEGIN
+		;THROW 51000, 'You cannot change the purpose!', 2
+	END
+
+	UPDATE Journeys
+	SET Purpose = @NewPurpose
+	WHERE Id = @JourneyId
+END
+
+-- 20. Deleted Journeys
+
+CREATE TABLE DeletedJourneys
+(
+	Id INT,
+	JourneyStart DATETIME,
+	JourneyEnd DATETIME,
+	Purpose VARCHAR(11),
+	DestinationSpaceportId INT,
+	SpaceshipId INT
+)
+
+GO
+
+CREATE TRIGGER t_DeleteJourney
+	ON Journeys
+	AFTER DELETE
+AS
+	BEGIN 
+		INSERT INTO DeletedJourneys(Id,JourneyStart,JourneyEnd,Purpose,DestinationSpaceportId,
+		SpaceshipId)
+		SELECT Id, JourneyStart, JourneyEnd, Purpose, DestinationSpaceportId, SpaceshipId FROM deleted
+	END
